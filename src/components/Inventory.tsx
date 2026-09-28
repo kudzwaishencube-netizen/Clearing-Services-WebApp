@@ -20,6 +20,36 @@ const PRICE_RANGES = [
   { label: 'Over $35k', min: 35000, max: Infinity },
 ];
 
+const INITIAL_VEHICLES: Vehicle[] = [
+  {
+    id: 1,
+    make: 'Toyota',
+    model: 'Hilux Revo',
+    year: 2021,
+    type: 'Truck',
+    price: 35000,
+    image: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800'
+  },
+  {
+    id: 2,
+    make: 'Mercedes-Benz',
+    model: 'C-Class',
+    year: 2019,
+    type: 'Sedan',
+    price: 28000,
+    image: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&q=80&w=800'
+  },
+  {
+    id: 3,
+    make: 'Honda',
+    model: 'CR-V',
+    year: 2020,
+    type: 'SUV',
+    price: 22000,
+    image: 'https://images.unsplash.com/photo-1568844293986-8d0400bd4745?auto=format&fit=crop&q=80&w=800'
+  }
+];
+
 export default function Inventory() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,10 +63,26 @@ export default function Inventory() {
   const fetchVehicles = async () => {
     try {
       const response = await fetch('/api/vehicles');
-      const data = await response.json();
-      setVehicles(data);
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('application/json')) {
+        const data = await response.json();
+        setVehicles(data);
+        localStorage.setItem('anchor_saved_vehicles', JSON.stringify(data));
+        return;
+      }
+      throw new Error('API route not returning JSON');
     } catch (error) {
-      console.error('Error fetching vehicles:', error);
+      // Fallback for Vercel static hosting
+      const saved = localStorage.getItem('anchor_saved_vehicles');
+      if (saved) {
+        try {
+          setVehicles(JSON.parse(saved));
+        } catch {
+          setVehicles(INITIAL_VEHICLES);
+        }
+      } else {
+        setVehicles(INITIAL_VEHICLES);
+      }
     } finally {
       setLoading(false);
     }
