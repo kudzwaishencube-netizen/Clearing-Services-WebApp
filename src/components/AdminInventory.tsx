@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
-import { Plus, Trash2, Loader2, Image as ImageIcon, X, Car, Upload } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Plus, Trash2, Loader2, Image as ImageIcon, X, Car, Upload, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface Vehicle {
   id: number;
@@ -21,6 +21,8 @@ export default function AdminInventory() {
   const [isAdding, setIsAdding] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [vehicleToDelete, setVehicleToDelete] = useState<Vehicle | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newVehicle, setNewVehicle] = useState({
     make: '',
@@ -89,10 +91,17 @@ export default function AdminInventory() {
       }
     } catch (error) {
       console.error('Error uploading file:', error);
-      alert('Failed to upload image. Please try again.');
+      showToast('Failed to upload image. Please try again.', 'error');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((current) => (current?.message === message ? null : current));
+    }, 4000);
   };
 
   if (!isAuthenticated) {
@@ -151,6 +160,7 @@ export default function AdminInventory() {
       if (response.ok) {
         fetchVehicles();
         setIsAdding(false);
+        showToast('Vehicle successfully added to catalog!');
         setNewVehicle({
           make: '',
           model: '',
@@ -159,16 +169,19 @@ export default function AdminInventory() {
           price: 0,
           image: ''
         });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        showToast(errorData.error || 'Failed to add vehicle.', 'error');
       }
     } catch (error) {
       console.error('Error adding vehicle:', error);
+      showToast('Network error while adding vehicle.', 'error');
     }
   };
 
-  const handleDeleteVehicle = async (id: number) => {
-    if (!id) return;
-    if (!confirm('Are you sure you want to delete this vehicle?')) return;
-    
+  const confirmDeleteVehicle = async () => {
+    if (!vehicleToDelete) return;
+    const id = vehicleToDelete.id;
     setDeletingId(id);
     try {
       // Try DELETE first
@@ -180,14 +193,16 @@ export default function AdminInventory() {
       }
       
       if (response.ok) {
+        setVehicleToDelete(null);
+        showToast(`"${vehicleToDelete.year} ${vehicleToDelete.make} ${vehicleToDelete.model}" removed from catalog.`);
         await fetchVehicles();
       } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.error || 'Failed to delete vehicle'}`);
+        const errorData = await response.json().catch(() => ({}));
+        showToast(`Error: ${errorData.error || 'Failed to delete vehicle'}`, 'error');
       }
     } catch (error) {
       console.error('Error deleting vehicle:', error);
-      alert('Network error. Please check your connection.');
+      showToast('Network error. Please check your connection.', 'error');
     } finally {
       setDeletingId(null);
     }
@@ -390,12 +405,13 @@ export default function AdminInventory() {
                       <td className="px-6 py-4 text-sm font-bold text-primary">${car.price.toLocaleString()}</td>
                       <td className="px-6 py-4 text-right">
                         <button
-                          onClick={() => handleDeleteVehicle(car.id)}
+                          onClick={() => setVehicleToDelete(car)}
                           disabled={deletingId === car.id}
-                          className="p-2 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="Remove vehicle"
                         >
                           {deletingId === car.id ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <Loader2 className="w-5 h-5 animate-spin text-red-500" />
                           ) : (
                             <Trash2 className="w-5 h-5" />
                           )}
@@ -414,6 +430,91 @@ export default function AdminInventory() {
           )}
         </div>
       </div>
+
+      {/* In-App Delete Confirmation Modal (Does not use window.confirm) */}
+      <AnimatePresence>
+        {vehicleToDelete && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100"
+            >
+              <div className="p-6">
+                <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4 mx-auto">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 text-center mb-2">
+                  Remove from Inventory?
+                </h3>
+                <p className="text-gray-500 text-sm text-center mb-6">
+                  Are you sure you want to remove <span className="font-semibold text-gray-800">{vehicleToDelete.year} {vehicleToDelete.make} {vehicleToDelete.model}</span>? This will immediately remove it from both the staff dashboard and the public website.
+                </p>
+
+                <div className="bg-gray-50 rounded-xl p-3 mb-6 flex items-center gap-3 border border-gray-100">
+                  <img src={vehicleToDelete.image} alt="" className="w-14 h-14 rounded-lg object-cover" />
+                  <div>
+                    <div className="font-bold text-gray-900 text-sm">{vehicleToDelete.make} {vehicleToDelete.model}</div>
+                    <div className="text-xs text-gray-500">{vehicleToDelete.year} • {vehicleToDelete.type}</div>
+                    <div className="text-sm font-bold text-primary">${vehicleToDelete.price.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setVehicleToDelete(null)}
+                    disabled={deletingId !== null}
+                    className="flex-1 px-4 py-3 rounded-xl border border-gray-200 font-bold text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteVehicle}
+                    disabled={deletingId !== null}
+                    className="flex-1 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-colors shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {deletingId !== null ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Removing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        <span>Yes, Remove</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating In-App Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            className={`fixed bottom-6 left-1/2 z-[80] px-5 py-3 rounded-xl shadow-xl flex items-center gap-2.5 text-sm font-semibold text-white ${
+              toast.type === 'error' ? 'bg-red-600' : 'bg-gray-900'
+            }`}
+          >
+            {toast.type === 'error' ? (
+              <AlertTriangle className="w-4 h-4 text-white" />
+            ) : (
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+            )}
+            <span>{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

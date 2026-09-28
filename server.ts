@@ -40,20 +40,29 @@ db.exec(`
     type TEXT NOT NULL,
     price INTEGER NOT NULL,
     image TEXT NOT NULL
-  )
+  );
+  CREATE TABLE IF NOT EXISTS app_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
 `);
 
-// Seed initial data if empty
-const count = db.prepare("SELECT COUNT(*) as count FROM vehicles").get() as { count: number };
-if (count.count === 0) {
+// Seed initial data once only if never seeded before
+const metaRow = db.prepare("SELECT value FROM app_meta WHERE key = 'initial_seed_done'").get();
+if (!metaRow) {
   const insert = db.prepare("INSERT INTO vehicles (make, model, year, type, price, image) VALUES (?, ?, ?, ?, ?, ?)");
   insert.run('Toyota', 'Hilux Revo', 2021, 'Truck', 35000, 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800');
   insert.run('Mercedes-Benz', 'C-Class', 2019, 'Sedan', 28000, 'https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&q=80&w=800');
   insert.run('Honda', 'CR-V', 2020, 'SUV', 22000, 'https://images.unsplash.com/photo-1568844293986-8d0400bd4745?auto=format&fit=crop&q=80&w=800');
+  db.prepare("INSERT INTO app_meta (key, value) VALUES ('initial_seed_done', 'true')").run();
 }
 
-// Remove specific IDs requested by user
-db.prepare("DELETE FROM vehicles WHERE id IN (4, 5, 6)").run();
+// Ensure previously requested removals (IDs 4, 5, 6) remain cleared
+try {
+  db.prepare("DELETE FROM vehicles WHERE id IN (4, 5, 6)").run();
+} catch (e) {
+  // Ignore if already deleted
+}
 
 async function startServer() {
   const app = express();
@@ -61,8 +70,9 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Serve uploaded files
+  // Serve uploaded files and public assets
   app.use("/uploads", express.static(uploadsDir));
+  app.use(express.static(path.join(__dirname, "public")));
 
   // API Routes
   app.get("/api/vehicles", (req, res) => {

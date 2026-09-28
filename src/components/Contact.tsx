@@ -11,6 +11,8 @@ export default function Contact() {
     message: ''
   });
 
+  const [sentNotice, setSentNotice] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -29,8 +31,8 @@ ${formState.message}`;
     const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
     
     window.open(whatsappUrl, '_blank');
-    
-    alert('Opening WhatsApp to send your message...');
+    setSentNotice(true);
+    setTimeout(() => setSentNotice(false), 5000);
     setFormState({ name: '', email: '', phone: '', type: 'General Inquiry', message: '' });
   };
 
@@ -160,6 +162,12 @@ ${formState.message}`;
                   placeholder="How can we help you?"
                 ></textarea>
               </div>
+
+              {sentNotice && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl text-center font-medium">
+                  WhatsApp opened in a new tab with your pre-filled inquiry.
+                </div>
+              )}
 
               <button
                 type="submit"
