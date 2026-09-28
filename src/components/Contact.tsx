@@ -16,7 +16,7 @@ export default function Contact() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    const phoneNumber = "263772441328"; // Using the first contact number
+    const phoneNumber = "263712510721"; // Primary WhatsApp number
     const message = `*New Inquiry from Anchor Freight Website*
     
 *Name:* ${formState.name}
@@ -58,9 +58,59 @@ ${formState.message}`;
                   <Phone className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 mb-1">Phone / WhatsApp</h3>
-                  <p className="text-gray-600">+263 772 441 328</p>
-                  <p className="text-gray-600">+263 773 503 001</p>
+                  <h3 className="font-bold text-gray-900 mb-2">Phone / WhatsApp</h3>
+                  <div className="space-y-1.5 text-sm">
+                    <div>
+                      <a 
+                        href="https://wa.me/263712510721" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-gray-600 hover:text-primary transition-colors block"
+                      >
+                        +263 71 251 0721 — <span className="font-medium text-gray-900">Chrispen</span>
+                      </a>
+                    </div>
+                    <div>
+                      <a 
+                        href="https://wa.me/263712591449" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-gray-600 hover:text-primary transition-colors block"
+                      >
+                        +263 71 259 1449 — <span className="font-medium text-gray-900">Prudence</span>
+                      </a>
+                    </div>
+                    <div>
+                      <a 
+                        href="https://wa.me/263772441328" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-gray-600 hover:text-primary transition-colors block"
+                      >
+                        +263 77 244 1328 — <span className="font-medium text-gray-900">Leroy</span>
+                      </a>
+                    </div>
+                    <div>
+                      <a 
+                        href="https://wa.me/263773503001" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-gray-600 hover:text-primary transition-colors block"
+                      >
+                        +263 77 350 3001 — <span className="font-medium text-gray-900">Chrispen</span>
+                      </a>
+                    </div>
+                    <div>
+                      <a 
+                        href="https://wa.me/263782406693" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-gray-600 hover:text-primary transition-colors block"
+                      >
+                        +263 78 240 6693 — <span className="font-medium text-gray-900">Fungai</span>
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </div>
 

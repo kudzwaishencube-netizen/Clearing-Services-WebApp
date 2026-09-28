@@ -50,7 +50,7 @@ export default function Inventory() {
 
   const generateWhatsAppLink = (carName: string) => {
     const text = `I am interested in the ${carName} listed on your website.`;
-    return `https://wa.me/263772441328?text=${encodeURIComponent(text)}`;
+    return `https://wa.me/263712510721?text=${encodeURIComponent(text)}`;
   };
 
   return (
