@@ -1,60 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Car, Filter, MessageCircle, Loader2 } from 'lucide-react';
-
-interface Vehicle {
-  id: number;
-  make: string;
-  model: string;
-  year: number;
-  type: string;
-  price: number;
-  image: string;
-}
+import { inventoryService } from '../lib/inventoryService';
+import { Vehicle } from '../data/defaultVehicles';
 
 const VEHICLE_TYPES = ['All', 'Sedan', 'SUV', 'Truck'];
-const PRICE_RANGES = [
-  { label: 'All Prices', min: 0, max: Infinity },
-  { label: 'Under $20k', min: 0, max: 20000 },
-  { label: '$20k - $35k', min: 20000, max: 35000 },
-  { label: 'Over $35k', min: 35000, max: Infinity },
-];
-
-const INITIAL_VEHICLES: Vehicle[] = [
-  {
-    id: 1,
-    make: 'Toyota',
-    model: 'Hilux Revo',
-    year: 2021,
-    type: 'Truck',
-    price: 35000,
-    image: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800'
-  },
-  {
-    id: 2,
-    make: 'Mercedes-Benz',
-    model: 'C-Class',
-    year: 2019,
-    type: 'Sedan',
-    price: 28000,
-    image: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&q=80&w=800'
-  },
-  {
-    id: 3,
-    make: 'Honda',
-    model: 'CR-V',
-    year: 2020,
-    type: 'SUV',
-    price: 22000,
-    image: 'https://images.unsplash.com/photo-1568844293986-8d0400bd4745?auto=format&fit=crop&q=80&w=800'
-  }
-];
 
 export default function Inventory() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedType, setSelectedType] = useState('All');
-  const [selectedPriceRange, setSelectedPriceRange] = useState(PRICE_RANGES[0]);
 
   useEffect(() => {
     fetchVehicles();
@@ -62,40 +17,21 @@ export default function Inventory() {
 
   const fetchVehicles = async () => {
     try {
-      const response = await fetch('/api/vehicles');
-      const contentType = response.headers.get('content-type') || '';
-      if (response.ok && contentType.includes('application/json')) {
-        const data = await response.json();
-        setVehicles(data);
-        localStorage.setItem('anchor_saved_vehicles', JSON.stringify(data));
-        return;
-      }
-      throw new Error('API route not returning JSON');
+      const data = await inventoryService.getVehicles();
+      setVehicles(data);
     } catch (error) {
-      // Fallback for Vercel static hosting
-      const saved = localStorage.getItem('anchor_saved_vehicles');
-      if (saved) {
-        try {
-          setVehicles(JSON.parse(saved));
-        } catch {
-          setVehicles(INITIAL_VEHICLES);
-        }
-      } else {
-        setVehicles(INITIAL_VEHICLES);
-      }
+      console.error('Error fetching inventory:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const filteredCars = vehicles.filter((car) => {
-    const matchesType = selectedType === 'All' || car.type === selectedType;
-    const matchesPrice = car.price >= selectedPriceRange.min && car.price <= selectedPriceRange.max;
-    return matchesType && matchesPrice;
+    return selectedType === 'All' || car.type === selectedType;
   });
 
   const generateWhatsAppLink = (carName: string) => {
-    const text = `I am interested in the ${carName} listed on your website.`;
+    const text = `I am interested in the ${carName} listed on your website. Please provide the price and clearing details.`;
     return `https://wa.me/263712510721?text=${encodeURIComponent(text)}`;
   };
 
@@ -114,20 +50,20 @@ export default function Inventory() {
             Vehicle Inventory
           </motion.h2>
           <p className="text-gray-600 max-w-2xl mx-auto text-base md:text-lg">
-            Browse our selection of quality imported vehicles. Filter by type or price to find your perfect match.
+            Browse our selection of quality imported vehicles. Select a category below and inquire directly on WhatsApp for full pricing, availability, and import duty details.
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-6 mb-12 justify-center items-center">
-          <div className="flex items-center gap-2 bg-white p-2 rounded-xl shadow-xs border border-gray-100">
-            <Filter className="w-5 h-5 text-primary ml-2" />
-            <div className="flex gap-1 flex-wrap">
+        {/* Category Filters */}
+        <div className="flex gap-4 mb-12 justify-center items-center">
+          <div className="flex items-center gap-2 bg-white p-2 rounded-2xl shadow-xs border border-gray-100">
+            <Filter className="w-5 h-5 text-primary ml-2 hidden sm:block" />
+            <div className="flex gap-1 flex-wrap justify-center">
               {VEHICLE_TYPES.map((type) => (
                 <button
                   key={type}
                   onClick={() => setSelectedType(type)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                     selectedType === type
                       ? 'bg-primary text-white shadow-xs'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -137,23 +73,6 @@ export default function Inventory() {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedPriceRange.label}
-              onChange={(e) => {
-                const range = PRICE_RANGES.find((r) => r.label === e.target.value);
-                if (range) setSelectedPriceRange(range);
-              }}
-              className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-primary focus:border-primary block p-2.5 shadow-xs"
-            >
-              {PRICE_RANGES.map((range) => (
-                <option key={range.label} value={range.label}>
-                  {range.label}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       </div>
@@ -183,13 +102,12 @@ export default function Inventory() {
                 >
                   <div>
                     {/* Vehicle Image with Type Badge */}
-                    <div className="relative h-52 overflow-hidden bg-gray-100">
+                    <div className="relative h-56 overflow-hidden bg-gray-100">
                       <img
                         src={car.image}
                         alt={`${car.make} ${car.model}`}
                         className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
                         onError={(e) => {
-                          // Fallback placeholder image if URL fails
                           (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800';
                         }}
                       />
@@ -198,17 +116,12 @@ export default function Inventory() {
                       </div>
                     </div>
 
-                    {/* Vehicle Specs */}
+                    {/* Vehicle Specs (Without Price) */}
                     <div className="p-6">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="text-xl font-bold text-gray-900 group-hover:text-primary transition-colors">
-                            {car.make} {car.model}
-                          </h3>
-                          <p className="text-gray-500 text-sm font-medium">{car.year}</p>
-                        </div>
-                        <p className="text-xl font-bold text-primary">${car.price.toLocaleString()}</p>
-                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-primary transition-colors">
+                        {car.make} {car.model}
+                      </h3>
+                      <p className="text-gray-500 text-sm font-medium mt-1">{car.year} • {car.type}</p>
                     </div>
                   </div>
 
@@ -218,10 +131,10 @@ export default function Inventory() {
                       href={generateWhatsAppLink(`${car.year} ${car.make} ${car.model}`)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center w-full gap-2 bg-[#25D366] hover:bg-[#128C7E] text-white font-semibold py-3 px-4 rounded-xl transition-colors duration-300 shadow-sm"
+                      className="flex items-center justify-center w-full gap-2 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3.5 px-4 rounded-xl transition-colors duration-300 shadow-sm"
                     >
                       <MessageCircle className="w-5 h-5" />
-                      Inquire on WhatsApp
+                      Inquire for Price & Details
                     </a>
                   </div>
                 </motion.div>
@@ -236,10 +149,10 @@ export default function Inventory() {
             <p className="text-gray-600 text-lg font-medium">No vehicles found matching your criteria.</p>
             <p className="text-gray-400 text-sm mt-1">Try selecting a different filter or check back soon.</p>
             <button 
-              onClick={() => { setSelectedType('All'); setSelectedPriceRange(PRICE_RANGES[0]); }}
+              onClick={() => setSelectedType('All')}
               className="mt-4 px-4 py-2 rounded-xl bg-orange-50 text-primary font-bold text-sm hover:bg-orange-100 transition-colors"
             >
-              Reset Filters
+              Show All Vehicles
             </button>
           </div>
         )}

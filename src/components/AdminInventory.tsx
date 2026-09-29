@@ -1,46 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Loader2, Image as ImageIcon, X, Car, Upload, AlertTriangle, CheckCircle } from 'lucide-react';
-
-interface Vehicle {
-  id: number;
-  make: string;
-  model: string;
-  year: number;
-  type: string;
-  price: number;
-  image: string;
-}
-
-const INITIAL_VEHICLES: Vehicle[] = [
-  {
-    id: 1,
-    make: 'Toyota',
-    model: 'Hilux Revo',
-    year: 2021,
-    type: 'Truck',
-    price: 35000,
-    image: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800'
-  },
-  {
-    id: 2,
-    make: 'Mercedes-Benz',
-    model: 'C-Class',
-    year: 2019,
-    type: 'Sedan',
-    price: 28000,
-    image: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&q=80&w=800'
-  },
-  {
-    id: 3,
-    make: 'Honda',
-    model: 'CR-V',
-    year: 2020,
-    type: 'SUV',
-    price: 22000,
-    image: 'https://images.unsplash.com/photo-1568844293986-8d0400bd4745?auto=format&fit=crop&q=80&w=800'
-  }
-];
+import { 
+  Plus, 
+  Trash2, 
+  Loader2, 
+  Image as ImageIcon, 
+  X, 
+  Car, 
+  Upload, 
+  AlertTriangle, 
+  CheckCircle 
+} from 'lucide-react';
+import { inventoryService } from '../lib/inventoryService';
+import { Vehicle } from '../data/defaultVehicles';
 
 export default function AdminInventory() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -54,6 +26,7 @@ export default function AdminInventory() {
   const [vehicleToDelete, setVehicleToDelete] = useState<Vehicle | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [newVehicle, setNewVehicle] = useState({
     make: '',
     model: '',
@@ -91,34 +64,17 @@ export default function AdminInventory() {
   const fetchVehicles = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/vehicles');
-      const contentType = response.headers.get('content-type') || '';
-      if (response.ok && contentType.includes('application/json')) {
-        const data = await response.json();
-        setVehicles(data);
-        localStorage.setItem('anchor_saved_vehicles', JSON.stringify(data));
-        return;
-      }
-      throw new Error('API route not returning JSON');
+      const data = await inventoryService.getVehicles();
+      setVehicles(data);
     } catch (error) {
-      // Fallback for Vercel static deployment
-      const saved = localStorage.getItem('anchor_saved_vehicles');
-      if (saved) {
-        try {
-          setVehicles(JSON.parse(saved));
-        } catch {
-          setVehicles(INITIAL_VEHICLES);
-        }
-      } else {
-        setVehicles(INITIAL_VEHICLES);
-        localStorage.setItem('anchor_saved_vehicles', JSON.stringify(INITIAL_VEHICLES));
-      }
+      console.error('Error loading inventory:', error);
+      showToast('Could not load vehicles', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Client-side image compression that works on Vercel without requiring server disk
+  // Client-side image compression that works seamlessly on device uploads
   const compressImageFile = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       if (!file.type.startsWith('image/')) {
@@ -131,8 +87,8 @@ export default function AdminInventory() {
         const img = new Image();
         img.onerror = () => reject(new Error('Could not load image preview.'));
         img.onload = () => {
-          const MAX_WIDTH = 1200;
-          const MAX_HEIGHT = 900;
+          const MAX_WIDTH = 1000;
+          const MAX_HEIGHT = 750;
           let width = img.width;
           let height = img.height;
 
@@ -150,11 +106,13 @@ export default function AdminInventory() {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (!ctx) {
-            resolve(readerEvent.target?.result as string);
+            reject(new Error('Canvas processing not supported.'));
             return;
           }
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+
+          // Compress to efficient JPEG dataURL
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
           resolve(dataUrl);
         };
         img.src = readerEvent.target?.result as string;
@@ -169,29 +127,9 @@ export default function AdminInventory() {
 
     setIsUploading(true);
     try {
-      // 1. Process and compress directly in browser (works seamlessly on Vercel without disk access)
       const dataUrl = await compressImageFile(file);
       setNewVehicle((prev) => ({ ...prev, image: dataUrl }));
-      showToast('Photo loaded and optimized from your device!');
-
-      // 2. Also try server upload if backend server is available (optional sync)
-      try {
-        const formData = new FormData();
-        formData.append('image', file);
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        const contentType = response.headers.get('content-type') || '';
-        if (response.ok && contentType.includes('application/json')) {
-          const data = await response.json();
-          if (data.imageUrl) {
-            setNewVehicle((prev) => ({ ...prev, image: data.imageUrl }));
-          }
-        }
-      } catch (e) {
-        // Safe to ignore on Vercel / serverless: dataUrl is already set!
-      }
+      showToast('Photo uploaded from your device successfully!');
     } catch (error: any) {
       console.error('Error processing image:', error);
       showToast(error.message || 'Failed to process image from device.', 'error');
@@ -208,6 +146,50 @@ export default function AdminInventory() {
     setTimeout(() => {
       setToast((current) => (current?.message === message ? null : current));
     }, 4000);
+  };
+
+  const handleAddVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await inventoryService.addVehicle(newVehicle);
+      if (res.success) {
+        await fetchVehicles();
+        setIsAdding(false);
+        showToast('Vehicle added successfully!');
+        setNewVehicle({
+          make: '',
+          model: '',
+          year: new Date().getFullYear(),
+          type: 'Sedan',
+          price: 0,
+          image: ''
+        });
+      } else {
+        showToast(res.error || 'Failed to add vehicle', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Error adding vehicle', 'error');
+    }
+  };
+
+  const confirmDeleteVehicle = async () => {
+    if (!vehicleToDelete) return;
+    const id = vehicleToDelete.id;
+    setDeletingId(id);
+    try {
+      const res = await inventoryService.deleteVehicle(id);
+      if (res.success) {
+        await fetchVehicles();
+        setVehicleToDelete(null);
+        showToast(`"${vehicleToDelete.year} ${vehicleToDelete.make} ${vehicleToDelete.model}" removed.`);
+      } else {
+        showToast(res.error || 'Failed to delete vehicle', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Error deleting vehicle', 'error');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (!isAuthenticated) {
@@ -255,102 +237,33 @@ export default function AdminInventory() {
     );
   }
 
-  const handleAddVehicle = async (e: React.FormEvent) => {
-    e.preventDefault();
-    let serverSuccess = false;
-    try {
-      const response = await fetch('/api/vehicles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newVehicle)
-      });
-      const contentType = response.headers.get('content-type') || '';
-      if (response.ok && contentType.includes('application/json')) {
-        serverSuccess = true;
-        await fetchVehicles();
-      }
-    } catch (err) {
-      // Backend unavailable or Vercel static hosting
-    }
-
-    if (!serverSuccess) {
-      // Direct LocalStorage sync for Vercel
-      const saved = localStorage.getItem('anchor_saved_vehicles');
-      const currentList: Vehicle[] = saved ? JSON.parse(saved) : vehicles;
-      const createdVehicle: Vehicle = {
-        ...newVehicle,
-        id: Date.now()
-      };
-      const updatedList = [createdVehicle, ...currentList];
-      localStorage.setItem('anchor_saved_vehicles', JSON.stringify(updatedList));
-      setVehicles(updatedList);
-    }
-
-    setIsAdding(false);
-    showToast('Vehicle successfully added to catalog!');
-    setNewVehicle({
-      make: '',
-      model: '',
-      year: new Date().getFullYear(),
-      type: 'Sedan',
-      price: 0,
-      image: ''
-    });
-  };
-
-  const confirmDeleteVehicle = async () => {
-    if (!vehicleToDelete) return;
-    const id = vehicleToDelete.id;
-    setDeletingId(id);
-    try {
-      // Try DELETE first
-      let response = await fetch(`/api/vehicles/${id}`, { method: 'DELETE' });
-      
-      // If DELETE is blocked or fails, try POST fallback
-      if (!response.ok && response.status !== 404) {
-        await fetch(`/api/vehicles/${id}/delete`, { method: 'POST' });
-      }
-    } catch (error) {
-      // Backend offline or on Vercel static hosting
-    }
-
-    // Always update local state & localStorage for Vercel compatibility
-    const saved = localStorage.getItem('anchor_saved_vehicles');
-    if (saved) {
-      try {
-        const currentList: Vehicle[] = JSON.parse(saved);
-        const updatedList = currentList.filter(v => v.id !== id);
-        localStorage.setItem('anchor_saved_vehicles', JSON.stringify(updatedList));
-      } catch (e) {}
-    }
-
-    setVehicles(prev => prev.filter(v => v.id !== id));
-    setVehicleToDelete(null);
-    showToast(`"${vehicleToDelete.year} ${vehicleToDelete.make} ${vehicleToDelete.model}" removed from catalog.`);
-    setDeletingId(null);
-  };
-
   return (
     <div className="min-h-screen bg-surface pt-24 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-8">
+        
+        {/* Clean, Professional Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-accent">Manage Inventory</h1>
-            <p className="text-gray-500">Add or remove vehicles from the public catalog.</p>
+            <p className="text-gray-500 text-sm mt-1">
+              Add or remove vehicles in your inventory.
+            </p>
           </div>
-          <div className="flex gap-4">
-            <button
-              onClick={handleLogout}
-              className="px-6 py-3 rounded-lg font-bold text-gray-500 hover:bg-gray-100 transition-colors"
-            >
-              Logout
-            </button>
+
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setIsAdding(true)}
-              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20"
+              className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20"
             >
-              <Plus className="w-5 h-5" />
-              Add Vehicle
+              <Plus className="w-4 h-4" />
+              <span>Add Vehicle</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2.5 rounded-xl font-medium text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              Logout
             </button>
           </div>
         </div>
@@ -390,7 +303,7 @@ export default function AdminInventory() {
                       className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-primary outline-none"
                       value={newVehicle.model}
                       onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })}
-                      placeholder="e.g. Hilux"
+                      placeholder="e.g. Hilux Revo"
                     />
                   </div>
                 </div>
@@ -402,7 +315,7 @@ export default function AdminInventory() {
                       type="number"
                       className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-primary outline-none"
                       value={isNaN(newVehicle.year) ? '' : newVehicle.year}
-                      onChange={(e) => setNewVehicle({ ...newVehicle, year: parseInt(e.target.value) })}
+                      onChange={(e) => setNewVehicle({ ...newVehicle, year: parseInt(e.target.value) || 0 })}
                     />
                   </div>
                   <div>
@@ -418,13 +331,13 @@ export default function AdminInventory() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Price (Optional)</label>
                     <input
-                      required
                       type="number"
                       className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-primary outline-none"
-                      value={isNaN(newVehicle.price) ? '' : newVehicle.price}
-                      onChange={(e) => setNewVehicle({ ...newVehicle, price: parseInt(e.target.value) })}
+                      value={newVehicle.price === 0 ? '' : newVehicle.price}
+                      onChange={(e) => setNewVehicle({ ...newVehicle, price: parseInt(e.target.value) || 0 })}
+                      placeholder="e.g. 25000"
                     />
                   </div>
                 </div>
@@ -443,16 +356,16 @@ export default function AdminInventory() {
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-500 hover:border-primary hover:text-primary transition-all group"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-600 hover:border-primary hover:text-primary transition-all group"
                       >
                         {isUploading ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
                           <Upload className="w-5 h-5 group-hover:scale-110 transition-transform" />
                         )}
-                        {isUploading ? 'Uploading...' : 'Upload from PC'}
+                        {isUploading ? 'Compressing from device...' : 'Upload from PC / Phone'}
                       </button>
-                      <p className="text-[10px] text-gray-400 mt-1">Or paste a URL below</p>
+                      <p className="text-[11px] text-gray-400 mt-1">Or paste a photo web URL below</p>
                     </div>
                     <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden border border-gray-200">
                       {newVehicle.image ? (
@@ -468,7 +381,7 @@ export default function AdminInventory() {
                     className="w-full mt-2 px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-primary outline-none text-sm"
                     value={newVehicle.image}
                     onChange={(e) => setNewVehicle({ ...newVehicle, image: e.target.value })}
-                    placeholder="https://images.unsplash.com/..."
+                    placeholder="https://images.unsplash.com/... or uploaded photo"
                   />
                 </div>
                 <div className="pt-4 flex gap-3">
@@ -491,7 +404,7 @@ export default function AdminInventory() {
           </div>
         )}
 
-        {/* List */}
+        {/* Vehicles Table List */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           {loading ? (
             <div className="p-20 flex flex-col items-center">
@@ -515,7 +428,14 @@ export default function AdminInventory() {
                     <tr key={car.id} className="hover:bg-surface/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-4">
-                          <img src={car.image} className="w-12 h-12 rounded-lg object-cover" alt="" />
+                          <img 
+                            src={car.image} 
+                            className="w-12 h-12 rounded-lg object-cover bg-gray-100" 
+                            alt="" 
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800';
+                            }}
+                          />
                           <div>
                             <div className="font-bold text-gray-900">{car.make} {car.model}</div>
                             <div className="text-xs text-gray-400">ID: #{car.id}</div>
@@ -523,8 +443,9 @@ export default function AdminInventory() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{car.type}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{car.year}</td>
-                      <td className="px-6 py-4 text-sm font-bold text-primary">${car.price.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-sm font-bold text-gray-700">
+                        {car.price > 0 ? `$${car.price.toLocaleString()}` : <span className="text-gray-400 font-normal italic">On Inquiry</span>}
+                      </td>
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => setVehicleToDelete(car)}
@@ -553,7 +474,7 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      {/* In-App Delete Confirmation Modal (Does not use window.confirm) */}
+      {/* In-App Delete Confirmation Modal */}
       <AnimatePresence>
         {vehicleToDelete && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -578,8 +499,9 @@ export default function AdminInventory() {
                   <img src={vehicleToDelete.image} alt="" className="w-14 h-14 rounded-lg object-cover" />
                   <div>
                     <div className="font-bold text-gray-900 text-sm">{vehicleToDelete.make} {vehicleToDelete.model}</div>
-                    <div className="text-xs text-gray-500">{vehicleToDelete.year} • {vehicleToDelete.type}</div>
-                    <div className="text-sm font-bold text-primary">${vehicleToDelete.price.toLocaleString()}</div>
+                    <div className="text-sm font-semibold text-primary">
+                      {vehicleToDelete.price > 0 ? `$${vehicleToDelete.price.toLocaleString()}` : 'Price on Inquiry'}
+                    </div>
                   </div>
                 </div>
 
