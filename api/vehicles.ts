@@ -72,24 +72,39 @@ export default async function handler(req: any, res: any) {
         }
       }
 
+      if (req.method === 'DELETE' || (req.method === 'POST' && req.body?.action === 'delete')) {
+        const rawId = req.query?.id || req.body?.id;
+        if (!rawId) {
+          return res.status(400).json({ error: 'Missing vehicle id' });
+        }
+        const numId = Number(rawId);
+        const queryId = !isNaN(numId) ? numId : rawId;
+        
+        let { data, error } = await supabase.from('vehicles').delete().eq('id', queryId).select();
+        
+        // Fallback with string ID if 0 rows matched
+        if (!error && (!data || data.length === 0)) {
+          const retry = await supabase.from('vehicles').delete().eq('id', String(rawId)).select();
+          if (retry.data && retry.data.length > 0) {
+            data = retry.data;
+          }
+          if (retry.error) {
+            error = retry.error;
+          }
+        }
+
+        if (!error) {
+          return res.status(200).json({ success: true, deleted: data });
+        }
+        return res.status(400).json({ error: error?.message || 'Failed to delete' });
+      }
+
       if (req.method === 'POST') {
         const { data, error } = await supabase.from('vehicles').insert([req.body]).select().single();
         if (!error && data) {
           return res.status(200).json(data);
         }
         return res.status(400).json({ error: error?.message || 'Failed to add' });
-      }
-
-      if (req.method === 'DELETE') {
-        const id = req.query?.id || req.body?.id;
-        if (!id) {
-          return res.status(400).json({ error: 'Missing vehicle id' });
-        }
-        const { error } = await supabase.from('vehicles').delete().eq('id', id);
-        if (!error) {
-          return res.status(200).json({ success: true });
-        }
-        return res.status(400).json({ error: error?.message || 'Failed to delete' });
       }
     } catch (e: any) {
       console.error('Supabase serverless error:', e);

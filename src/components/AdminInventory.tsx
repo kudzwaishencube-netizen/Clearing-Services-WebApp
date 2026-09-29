@@ -175,17 +175,22 @@ export default function AdminInventory() {
   const confirmDeleteVehicle = async () => {
     if (!vehicleToDelete) return;
     const id = vehicleToDelete.id;
+    const vehicleInfo = `${vehicleToDelete.year} ${vehicleToDelete.make} ${vehicleToDelete.model}`;
     setDeletingId(id);
     try {
       const res = await inventoryService.deleteVehicle(id);
       if (res.success) {
-        await fetchVehicles();
+        // Optimistic UI update: remove from screen immediately
+        setVehicles((prev) => prev.filter((v) => String(v.id) !== String(id)));
         setVehicleToDelete(null);
-        showToast(`"${vehicleToDelete.year} ${vehicleToDelete.make} ${vehicleToDelete.model}" removed.`);
+        showToast(`"${vehicleInfo}" removed.`);
+        await fetchVehicles();
       } else {
+        setVehicleToDelete(null);
         showToast(res.error || 'Failed to delete vehicle', 'error');
       }
     } catch (err: any) {
+      setVehicleToDelete(null);
       showToast(err.message || 'Error deleting vehicle', 'error');
     } finally {
       setDeletingId(null);

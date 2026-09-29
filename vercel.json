@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/vehicles/:id",
+      "destination": "/api/vehicles?id=:id"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

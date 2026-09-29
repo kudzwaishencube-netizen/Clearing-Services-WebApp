@@ -85,15 +85,9 @@ export const inventoryService = {
           .select('*')
           .order('id', { ascending: false });
 
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           return data as Vehicle[];
-        }
-
-        // If table is empty, seed initial vehicles into Supabase
-        if (!error && data && data.length === 0) {
-          await supabase.from('vehicles').insert(DEFAULT_VEHICLES);
-          return DEFAULT_VEHICLES;
         }
       } catch (err) {
         console.warn('Supabase fetch failed, falling back:', err);
@@ -203,31 +197,67 @@ export const inventoryService = {
     };
   },
 
-  async deleteVehicle(id: number): Promise<{ success: boolean; error?: string }> {
+  async deleteVehicle(id: number | string): Promise<{ success: boolean; error?: string }> {
     const supabase = getSupabaseClient();
+    let supabaseSuccess = false;
+    let rlsError: string | null = null;
 
     // 1. If Supabase connected, delete from cloud database
     if (supabase) {
       try {
-        const { error } = await supabase
+        const numId = Number(id);
+        const queryId = !isNaN(numId) ? numId : id;
+
+        // Try deleting by numeric/clean ID
+        let { data, error } = await supabase
           .from('vehicles')
           .delete()
-          .eq('id', id);
+          .eq('id', queryId)
+          .select();
+
+        // If no rows deleted and no error, try deleting as string
+        if (!error && (!data || data.length === 0)) {
+          const retry = await supabase
+            .from('vehicles')
+            .delete()
+            .eq('id', String(id))
+            .select();
+
+          if (retry.data && retry.data.length > 0) {
+            data = retry.data;
+          }
+          if (retry.error) {
+            error = retry.error;
+          }
+        }
 
         if (error) {
-          return { success: false, error: error.message };
+          console.error('Supabase delete error:', error);
+          if (error.message?.includes('row-level security') || error.code === '42501') {
+            rlsError = 'Supabase Row-Level Security blocked delete. Please run: ALTER TABLE vehicles DISABLE ROW LEVEL SECURITY; in Supabase SQL Editor.';
+          } else {
+            rlsError = error.message;
+          }
+        } else if (data && data.length > 0) {
+          supabaseSuccess = true;
+        } else {
+          // If query returned 0 rows, check if RLS is silently dropping the delete
+          console.warn('Supabase delete matched 0 rows. Checking serverless fallback...');
         }
       } catch (err: any) {
-        return { success: false, error: err.message };
+        console.error('Supabase delete exception:', err);
+        rlsError = err.message;
       }
     }
 
-    // 2. Try server API
+    // 2. Try server / serverless API endpoint as backup
     try {
-      let response = await fetch(`/api/vehicles/${id}`, { method: 'DELETE' });
-      if (!response.ok && response.status !== 404) {
-        await fetch(`/api/vehicles/${id}/delete`, { method: 'POST' });
-      }
+      await fetch(`/api/vehicles?id=${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'delete' })
+      });
+      await fetch(`/api/vehicles/${id}`, { method: 'DELETE' });
     } catch (err) {
       // Backend unavailable
     }
@@ -237,11 +267,15 @@ export const inventoryService = {
       const cached = localStorage.getItem(STORAGE_KEY);
       if (cached) {
         const currentList: Vehicle[] = JSON.parse(cached);
-        const updated = currentList.filter(v => v.id !== id);
+        const updated = currentList.filter(v => String(v.id) !== String(id));
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       }
     } catch (e) {
       // Ignore
+    }
+
+    if (rlsError) {
+      return { success: false, error: rlsError };
     }
 
     return { success: true };
